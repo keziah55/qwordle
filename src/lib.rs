@@ -113,6 +113,8 @@ struct GameState {
     valid_words: Vec<String>,
     guess_count: u8,
     max_guesses: u8,
+    all_chars: HashSet<char>,
+    eliminated_chars: HashSet<char>,
 }
 
 impl GameState {
@@ -131,6 +133,8 @@ impl GameState {
             valid_words: valid_words,
             guess_count: 0,
             max_guesses: max_guesses,
+            all_chars: "qwertyuiopasdfghjklzxcvbnm".chars().collect(),
+            eliminated_chars: HashSet::new(),
         }
     }
 
@@ -192,7 +196,7 @@ impl GameState {
     }
 
     /// Return `GuessResult` for `guess`, detailing the result for each letter in `guess` and whether this represents both answers.
-    fn check_guess(&self, guess: &String) -> GuessResult {
+    fn check_guess(&mut self, guess: &String) -> GuessResult {
         let mut letter_results = Vec::new();
         let mut guessed_in_answers = vec![false, false];
 
@@ -224,6 +228,7 @@ impl GameState {
                 guessed_in_answers[1] = true;
                 LetterResult::CorrectLetterWrongPlace
             } else {
+                self.eliminated_chars.insert(letter);
                 LetterResult::WrongLetter
             };
 
@@ -239,7 +244,7 @@ impl GameState {
     }
 
     /// Return `ProcessedGuessResult`, with whether `guess` was correct and a message to display to the user.
-    fn process_guess(&self, guess: &String) -> ProcessedGuessResult {
+    fn process_guess(&mut self, guess: &String) -> ProcessedGuessResult {
         let mut format_guess_check = String::new();
         let guess_result = self.check_guess(&guess);
 
