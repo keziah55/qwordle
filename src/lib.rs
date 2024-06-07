@@ -174,35 +174,86 @@ fn process_guess(guess: &String, answers: &Vec<String>) -> ProcessedGuessResult 
         format_guess_check += &s;
     }
 
-    ProcessedGuessResult{
-        is_correct: is_correct, 
-        message: format_guess_check
+    ProcessedGuessResult {
+        is_correct: is_correct,
+        message: format_guess_check,
+    }
+}
+
+struct GameState {
+    answers: Vec<String>,
+    valid_words: Vec<String>,
+    guess_count: u8,
+    max_guesses: u8,
+}
+
+impl GameState {
+    pub fn new(max_guesses: u8) -> GameState {
+        let valid_words = get_valid_words();
+        let answers = select_words();
+
+        GameState {
+            answers: answers,
+            valid_words: valid_words,
+            guess_count: 0,
+            max_guesses: max_guesses,
+        }
     }
 
+    pub fn guess(&mut self, guess: &String) -> Result<ProcessedGuessResult, String> {
+        if validate_guess(guess, &self.valid_words) == false {
+            let s = format!("Not a valid word! Please guess again");
+            return Err(s);
+        }
+
+        let result = process_guess(guess, &self.answers);
+        self.increment_guess_count();
+        Ok(result)
+    }
+
+    fn increment_guess_count(&mut self) {
+        self.guess_count += 1;
+    }
+
+    pub fn out_of_guesses(&self) -> bool {
+        self.guess_count >= self.max_guesses
+    }
+
+    pub fn game_lost_message(&self) -> String {
+        format!(
+            "Bad luck! The answers were {} and {}",
+            self.answers[0].to_ascii_uppercase(),
+            self.answers[1].to_ascii_uppercase()
+        )
+    }
+
+    pub fn game_won_message(&self) -> String {
+        format!(
+            "Congratulations! The answers were {} and {}",
+            self.answers[0].to_ascii_uppercase(),
+            self.answers[1].to_ascii_uppercase()
+        )
+    }
+
+    pub fn guess_count_message(&self) -> String {
+        let print_guess_count = self.guess_count + 1;
+        format!("Guess {}/{}:", print_guess_count, self.max_guesses)
+    }
 }
 
 pub fn play() {
-    let valid_words = get_valid_words();
-
-    let answers = select_words();
-    let mut guess_count = 0;
-    let max_guesses = 6;
+    let mut state = GameState::new(6);
 
     write("Welcome to QWordle!");
 
     loop {
-        if guess_count >= max_guesses {
-            let s = format!(
-                "Bad luck! The answers were {} and {}",
-                answers[0].to_ascii_uppercase(),
-                answers[1].to_ascii_uppercase()
-            );
+        if state.out_of_guesses() {
+            let s = state.game_lost_message();
             write(&s);
             break;
         }
 
-        let print_guess_count = guess_count + 1;
-        let s = format!("Guess {print_guess_count}/{max_guesses}:");
+        let s = state.guess_count_message();
         write(&s);
 
         let mut buffer = String::new();
@@ -211,27 +262,22 @@ pub fn play() {
 
         buffer = buffer.trim().to_string().to_ascii_lowercase();
 
-        if validate_guess(&buffer, &valid_words) == false {
-            let s = format!("Not a valid word! Please guess again");
-            write(&s);
-            continue;
+        match state.guess(&buffer) {
+            Err(s) => {
+                write(&s);
+                continue;
+            }
+            Ok(result) => {
+                write(&result.message);
+
+                if result.is_correct {
+                    let s = state.game_won_message();
+                    write(&s);
+                    break;
+                }
+            }
         }
 
-        let result = process_guess(&buffer, &answers);
-
-        write(&result.message);
-
-        if result.is_correct {
-            let s = format!(
-                "Congratulations! The answers were {} and {}",
-                answers[0].to_ascii_uppercase(),
-                answers[1].to_ascii_uppercase()
-            );
-            write(&s);
-            break;
-        }
-
-        guess_count += 1;
         write("");
     }
 }
