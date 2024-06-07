@@ -91,94 +91,7 @@ fn select_words() -> Vec<String> {
     vec![words[0].clone(), words[1].clone()]
 }
 
-fn validate_guess(guess: &String, valid_words: &Vec<String>) -> bool {
-    valid_words.contains(guess)
-}
 
-fn check_guess(guess: &String, answers: &Vec<String>) -> GuessResult {
-    let mut letter_results = Vec::new();
-    let mut guessed_in_answers = vec![false, false];
-
-    let repeated_guess_letters = check_repeated_letters(&guess);
-
-    for (i, letter) in guess.chars().enumerate() {
-        let idx = i as u8;
-        if let Some(_) = repeated_guess_letters {
-            // if there's a repeated letter in guess, only get info about the first occurrence
-            // (because we know there aren't repeated letters in the answers)
-            let map = repeated_guess_letters.as_ref().unwrap();
-            let indices = map.get(&letter).unwrap();
-            if indices.first().unwrap() != &idx {
-                // if we're past the first occurrence, go to next letter in for loop
-                continue;
-            }
-        }
-
-        let result = if letter == answers[0].chars().nth(i).unwrap() {
-            guessed_in_answers[0] = true;
-            LetterResult::CorrectLetterCorrectPlace
-        } else if letter == answers[1].chars().nth(i).unwrap() {
-            guessed_in_answers[1] = true;
-            LetterResult::CorrectLetterCorrectPlace
-        } else if answers[0].contains(letter) {
-            guessed_in_answers[0] = true;
-            LetterResult::CorrectLetterWrongPlace
-        } else if answers[1].contains(letter) {
-            guessed_in_answers[1] = true;
-            LetterResult::CorrectLetterWrongPlace
-        } else {
-            LetterResult::WrongLetter
-        };
-
-        letter_results.push(result);
-    }
-
-    let both_words = guessed_in_answers.iter().all(|&b| b);
-
-    GuessResult {
-        letter_results: letter_results,
-        both_words: both_words,
-    }
-}
-
-fn process_guess(guess: &String, answers: &Vec<String>) -> ProcessedGuessResult {
-    let mut format_guess_check = String::new();
-    let guess_result = check_guess(&guess, &answers);
-
-    for (i, letter_result) in guess_result.letter_results.iter().enumerate() {
-        let letter_upper = guess.chars().nth(i).unwrap().to_ascii_uppercase();
-
-        let append_char = match letter_result {
-            LetterResult::CorrectLetterCorrectPlace => {
-                format!("\x1b[92m{letter_upper}\x1b[0m")
-            }
-            LetterResult::CorrectLetterWrongPlace => {
-                format!("\x1b[93m{letter_upper}\x1b[0m")
-            }
-            LetterResult::WrongLetter => {
-                format!("{letter_upper}")
-            }
-        };
-
-        format_guess_check += &append_char;
-    }
-
-    let is_correct = answers.contains(guess);
-
-    if is_correct == false {
-        let s = if guess_result.both_words {
-            format!("  (both words)")
-        } else {
-            format!("  (same word)")
-        };
-        format_guess_check += &s;
-    }
-
-    ProcessedGuessResult {
-        is_correct: is_correct,
-        message: format_guess_check,
-    }
-}
 
 struct GameState {
     answers: Vec<String>,
@@ -201,18 +114,14 @@ impl GameState {
     }
 
     pub fn guess(&mut self, guess: &String) -> Result<ProcessedGuessResult, String> {
-        if validate_guess(guess, &self.valid_words) == false {
+        if self.validate_guess(guess) == false {
             let s = format!("Not a valid word! Please guess again");
             return Err(s);
         }
 
-        let result = process_guess(guess, &self.answers);
+        let result = self.process_guess(guess);
         self.increment_guess_count();
         Ok(result)
-    }
-
-    fn increment_guess_count(&mut self) {
-        self.guess_count += 1;
     }
 
     pub fn out_of_guesses(&self) -> bool {
@@ -238,6 +147,99 @@ impl GameState {
     pub fn guess_count_message(&self) -> String {
         let print_guess_count = self.guess_count + 1;
         format!("Guess {}/{}:", print_guess_count, self.max_guesses)
+    }
+
+    fn increment_guess_count(&mut self) {
+        self.guess_count += 1;
+    }
+
+    fn validate_guess(&self, guess: &String) -> bool {
+        self.valid_words.contains(guess)
+    }
+    
+    fn check_guess(&self, guess: &String) -> GuessResult {
+        let mut letter_results = Vec::new();
+        let mut guessed_in_answers = vec![false, false];
+    
+        let repeated_guess_letters = check_repeated_letters(&guess);
+    
+        for (i, letter) in guess.chars().enumerate() {
+            let idx = i as u8;
+            if let Some(_) = repeated_guess_letters {
+                // if there's a repeated letter in guess, only get info about the first occurrence
+                // (because we know there aren't repeated letters in the answers)
+                let map = repeated_guess_letters.as_ref().unwrap();
+                let indices = map.get(&letter).unwrap();
+                if indices.first().unwrap() != &idx {
+                    // if we're past the first occurrence, go to next letter in for loop
+                    continue;
+                }
+            }
+    
+            let result = if letter == self.answers[0].chars().nth(i).unwrap() {
+                guessed_in_answers[0] = true;
+                LetterResult::CorrectLetterCorrectPlace
+            } else if letter == self.answers[1].chars().nth(i).unwrap() {
+                guessed_in_answers[1] = true;
+                LetterResult::CorrectLetterCorrectPlace
+            } else if self.answers[0].contains(letter) {
+                guessed_in_answers[0] = true;
+                LetterResult::CorrectLetterWrongPlace
+            } else if self.answers[1].contains(letter) {
+                guessed_in_answers[1] = true;
+                LetterResult::CorrectLetterWrongPlace
+            } else {
+                LetterResult::WrongLetter
+            };
+    
+            letter_results.push(result);
+        }
+    
+        let both_words = guessed_in_answers.iter().all(|&b| b);
+    
+        GuessResult {
+            letter_results: letter_results,
+            both_words: both_words,
+        }
+    }
+    
+    fn process_guess(&self, guess: &String) -> ProcessedGuessResult {
+        let mut format_guess_check = String::new();
+        let guess_result = self.check_guess(&guess);
+    
+        for (i, letter_result) in guess_result.letter_results.iter().enumerate() {
+            let letter_upper = guess.chars().nth(i).unwrap().to_ascii_uppercase();
+    
+            let append_char = match letter_result {
+                LetterResult::CorrectLetterCorrectPlace => {
+                    format!("\x1b[92m{letter_upper}\x1b[0m")
+                }
+                LetterResult::CorrectLetterWrongPlace => {
+                    format!("\x1b[93m{letter_upper}\x1b[0m")
+                }
+                LetterResult::WrongLetter => {
+                    format!("{letter_upper}")
+                }
+            };
+    
+            format_guess_check += &append_char;
+        }
+    
+        let is_correct = self.answers.contains(guess);
+    
+        if is_correct == false {
+            let s = if guess_result.both_words {
+                format!("  (both words)")
+            } else {
+                format!("  (same word)")
+            };
+            format_guess_check += &s;
+        }
+    
+        ProcessedGuessResult {
+            is_correct: is_correct,
+            message: format_guess_check,
+        }
     }
 }
 
