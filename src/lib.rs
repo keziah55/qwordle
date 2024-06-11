@@ -13,6 +13,7 @@ enum LetterResult {
 
 /// Struct showing the result for a guessed word.
 struct GuessResult {
+    word: String,
     letter_results: Vec<LetterResult>,
     both_words: bool,
 }
@@ -114,6 +115,7 @@ struct GameState {
     guess_count: u8,
     max_guesses: u8,
     all_chars: HashSet<char>,
+    found_chars: HashSet<char>,
     eliminated_chars: HashSet<char>,
 }
 
@@ -134,22 +136,24 @@ impl GameState {
             guess_count: 0,
             max_guesses: max_guesses,
             all_chars: "qwertyuiopasdfghjklzxcvbnm".chars().collect(),
+            found_chars: HashSet::new(),
             eliminated_chars: HashSet::new(),
         }
     }
 
-    /// Guess an answer, returning `ProcessedGuessResult` (or Error if `guess` is not a valid word.)
+    /// Guess an answer, returning `GuessResult` (or Error if `guess` is not a valid word.)
     /// 
     /// # Arguments
     /// 
     /// * `guess` - The user's guess
-    pub fn guess(&mut self, guess: &String) -> Result<ProcessedGuessResult, String> {
+    pub fn guess(&mut self, guess: &String) -> Result<GuessResult, String> {
         if self.validate_guess(guess) == false {
             let s = format!("Not a valid word! Please guess again");
             return Err(s);
         }
 
-        let result = self.process_guess(guess);
+        // let result = self.process_guess(guess);
+        let result = self.check_guess(guess);
         self.increment_guess_count();
         Ok(result)
     }
@@ -184,6 +188,14 @@ impl GameState {
             self.answers[0].to_ascii_uppercase(),
             self.answers[1].to_ascii_uppercase(),
         )
+    }
+
+    pub fn get_found_letters(&self) -> &HashSet<char> {
+        &self.found_chars
+    }
+
+    pub fn get_unguessed_letters(&self) -> HashSet<&char> {
+        self.all_chars.difference(&self.eliminated_chars).collect()
     }
 
     fn increment_guess_count(&mut self) {
@@ -238,15 +250,18 @@ impl GameState {
         let both_words = guessed_in_answers.iter().all(|&b| b);
 
         GuessResult {
+            word: guess.clone(),
             letter_results: letter_results,
             both_words: both_words,
         }
     }
 
     /// Return `ProcessedGuessResult`, with whether `guess` was correct and a message to display to the user.
-    fn process_guess(&mut self, guess: &String) -> ProcessedGuessResult {
+    pub fn process_guess(&mut self, guess_result: &GuessResult) -> ProcessedGuessResult {
         let mut format_guess_check = String::new();
-        let guess_result = self.check_guess(&guess);
+        // let guess_result = self.check_guess(&guess);
+
+        let guess = &guess_result.word;
 
         for (i, letter_result) in guess_result.letter_results.iter().enumerate() {
             let letter_upper = guess.chars().nth(i).unwrap().to_ascii_uppercase();
@@ -311,9 +326,10 @@ pub fn play() {
                 continue;
             }
             Ok(result) => {
-                write(&result.message);
+                let processed_result = state.process_guess(&result);
+                write(&processed_result.message);
 
-                if result.is_correct {
+                if processed_result.is_correct {
                     let s = state.game_won_message();
                     write(&s);
                     break;
@@ -327,4 +343,58 @@ pub fn play() {
 
 fn write(s: &str) {
     println!("{s}")
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::rstest;
+
+    #[rstest]
+    #[case(String::from("count"), None)]
+    #[case(String::from("a"), None)]
+    #[case(String::from("cat"), None)]
+    #[case(String::from("hello"), Some(HashMap::from([('h', vec![0]), ('e', vec![1]), ('l', vec![2,3]), ('o', vec![4])])))]
+    #[case(String::from("melee"), Some(HashMap::from([('m', vec![0]), ('e', vec![1,3,4]), ('l', vec![2])])))]
+    fn test_check_repeated_letters(#[case] input: String, #[case] expected: Option<HashMap<char, Vec<u8>>>) {
+        assert_eq!(expected, check_repeated_letters(&input))
+    }
+
+    #[test]
+    fn test_select_words() {
+        let words = select_words(100);
+        let all_chars: HashSet<char> = words.join("").chars().collect();
+        assert_eq!(10, all_chars.len());
+    }
+
+    #[rstest]
+    #[case(vec![String::from("lymph"), String::from("audio"), String::from("sever")], vec![false, true, false], vec![false, false, false])]
+    #[case(vec![String::from("shunt"), String::from("wrist"), String::from("arise")], vec![true, true, false], vec![false, false, true])]
+    #[case(vec![String::from("stack"), String::from("arise")], vec![true, false], vec![false, true])]
+    #[case(vec![String::from("count")], vec![false], vec![true])]
+    fn test_game_play(#[case] guesses: Vec<String>, #[case] both_words: Vec<bool>, #[case] is_correct: Vec<bool>) {
+
+        let answers: Vec<String> = vec![String::from("arise"), String::from("count")];
+        let valid_words = get_valid_words();
+        let mut state = GameState {
+            answers: answers,
+            valid_words: valid_words,
+            guess_count: 0,
+            max_guesses: 3,
+            all_chars: "qwertyuiopasdfghjklzxcvbnm".chars().collect(),
+            found_chars: HashSet::new(),
+            eliminated_chars: HashSet::new(),
+        };
+
+        for (i, guess) in guesses.iter().enumerate() {
+            let result = state.guess(&guess).unwrap();
+            let processed_result = state.process_guess(&result);
+            assert_eq!(both_words[i], result.both_words, "guess '{}' expected both words={}, got {}", guess, both_words[i], result.both_words);
+            assert_eq!(is_correct[i], processed_result.is_correct, "guess '{}' expected is correct={}, got {}", guess, is_correct[i], processed_result.is_correct);
+        }
+    }
+
+        
+
 }
